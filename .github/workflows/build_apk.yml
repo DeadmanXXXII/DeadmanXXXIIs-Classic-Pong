@@ -18,6 +18,7 @@ jobs:
     - name: 📦 Checkout Repository
       # Gets a copy of your code
       uses: actions/checkout@v4
+ 
 
     # --- NEW STEP TO FIX DEPENDENCY START ---
     - name: ⚙️ Workaround:Install libtinfo5 for Buildozer
@@ -28,6 +29,15 @@ jobs:
         sudo apt install -y ./libtinfo5_6.3-2ubuntu0.1_amd64.deb
         rm libtinfo5_6.3-2ubuntu0.1_amd64.deb
     # --- NEW STEP TO FIX DEPENDENCY END ---
+
+    # ... (Previous steps: Checkout Repository, Fix libtinfo5)
+
+    - name: ✅ Accept Android SDK Licenses
+      run: |
+        # Use sdkmanager to accept all licenses, piping 'y' to confirm automatically.
+        # This is a critical step for CI/CD environments.
+        yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses
+        
 
     - name: 🔨 Build APK with Buildozer
       # This is a specialized action that sets up the environment and runs the buildozer command
