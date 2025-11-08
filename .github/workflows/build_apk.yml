@@ -20,7 +20,7 @@ jobs:
       uses: actions/checkout@v4
 
     # --- NEW STEP TO FIX DEPENDENCY START ---
-    - name: ⚙️ Workaround: Install libtinfo5 for Buildozer
+    - name: ⚙️ Workaround:Install libtinfo5 for Buildozer
       run: |
         # libtinfo5 is missing on recent Ubuntu versions like Noble (24.04).
         # We manually fetch the package from the Jammy (22.04) repository and install it.
