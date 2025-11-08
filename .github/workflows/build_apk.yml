@@ -19,6 +19,16 @@ jobs:
       # Gets a copy of your code
       uses: actions/checkout@v4
 
+    # --- NEW STEP TO FIX DEPENDENCY START ---
+    - name: ⚙️ Workaround: Install libtinfo5 for Buildozer
+      run: |
+        # libtinfo5 is missing on recent Ubuntu versions like Noble (24.04).
+        # We manually fetch the package from the Jammy (22.04) repository and install it.
+        wget http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb
+        sudo apt install -y ./libtinfo5_6.3-2ubuntu0.1_amd64.deb
+        rm libtinfo5_6.3-2ubuntu0.1_amd64.deb
+    # --- NEW STEP TO FIX DEPENDENCY END ---
+
     - name: 🔨 Build APK with Buildozer
       # This is a specialized action that sets up the environment and runs the buildozer command
       uses: digreatbrian/buildozer-action@v2
