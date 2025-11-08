@@ -1,0 +1,40 @@
+# .github/workflows/build_apk.yml
+
+name: Android APK Build (Buildozer)
+
+# This workflow runs on every push to the main branch
+on:
+  push:
+    branches: [ main ]
+  # Allows you to manually trigger the workflow from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  build:
+    # Use the latest Ubuntu runner, which is a powerful Linux environment
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: 📦 Checkout Repository
+      # Gets a copy of your code
+      uses: actions/checkout@v4
+
+    - name: 🔨 Build APK with Buildozer
+      # This is a specialized action that sets up the environment and runs the buildozer command
+      uses: digreatbrian/buildozer-action@v2
+      id: buildozer
+      with:
+        # The command to execute (android debug is the default)
+        buildozer-cmd: buildozer -v android debug
+        # We assume buildozer.spec is in the root directory
+        work-dir: .
+        # Ensure your python version matches your requirements (3.8 is a safe default)
+        python-version: 3.8 
+
+    - name: ⬆️ Upload Artifact (APK)
+      # This step packages the resulting APK into a downloadable artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: Classic_Pong_APK
+        # Buildozer outputs the APK to the bin folder
+        path: ./bin/*.apk
