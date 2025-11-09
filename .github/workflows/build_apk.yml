@@ -66,10 +66,10 @@ jobs:
         SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
         
         # Accept licenses
-        yes | "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" --licenses
+        yes | "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" --licenses || true
         
         # Install tools (Ensure your buildozer.spec uses API 33/Build Tools 33.0.0)
-        yes | "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" "platform-tools" "platforms;android-33" "build-tools;33.0.0"
+        yes | "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" "platform-tools" "platforms;android-33" "build-tools;33.0.0" || true
         
     - name: 🔒 Finalize Environment Variables
       run: |
