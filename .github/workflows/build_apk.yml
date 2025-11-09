@@ -1,29 +1,86 @@
-name: Dockerized Android APK Build (Kivy/Buildozer)
+name: Robust CI/CD Android APK Build (Final Attempt)
 
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
 
+env:
+  # Define a consistent location for the Android SDK inside the runner's workspace
+  ANDROID_SDK_ROOT: ${{ github.workspace }}/.android-sdk
+
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-    - name: 📦 Checkout Repository
+    - name: 📦 Checkout repository
       uses: actions/checkout@v4
 
-    - name: 🐋 Execute Buildozer in Kivy Docker Container
-      # This single step replaces all complex setup, license acceptance, and build steps.
-      # It uses the official Docker image with all dependencies pre-configured and licenses accepted.
-      uses: docker://kivy/buildozer:python3-android
-      with:
-        # The entrypoint is the buildozer command, run inside the container
-        args: android debug
+    - name: ⚙️ Install system deps, Java, Python & libtinfo5
+      run: |
+        # Install necessary build tools and Java
+        sudo apt-get update
+        sudo apt-get install -y python3.8 python3.8-distutils python3-pip openjdk-11-jdk-headless unzip wget ca-certificates
+        sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.8 1
+        
+        # Install libtinfo5 fix
+        wget -q https://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb
+        sudo apt install -y ./libtinfo5_6.3-2ubuntu0.1_amd64.deb || true
+        rm -f libtinfo5_6.3-2ubuntu0.1_amd64.deb
+        
+        # INSTALL BUILD TOOLS DIRECTLY HERE, bypassing Docker
+        pip3 install buildozer cython kivy
+
+    - name: 🔧 Bootstrap Android cmdline-tools and sdkmanager
+      # Manually set up the SDK root.
+      run: |
+        set -euo pipefail
+        mkdir -p "$ANDROID_SDK_ROOT"
+        cd "$ANDROID_SDK_ROOT"
+        
+        CLI_TOOLS_Z="commandlinetools-linux-9477386_latest.zip"
+        CLI_URL="https://dl.google.com/android/repository/${CLI_TOOLS_Z}"
+        
+        if [ ! -d "$ANDROID_SDK_ROOT/cmdline-tools/latest" ]; then
+          wget -q "$CLI_URL" -O /tmp/cmdline-tools.zip
+          mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
+          unzip -q /tmp/cmdline-tools.zip -d "$ANDROID_SDK_ROOT/cmdline-tools/tmp"
+          mv "$ANDROID_SDK_ROOT/cmdline-tools/tmp/cmdline-tools" "$ANDROID_SDK_ROOT/cmdline-tools/latest"
+          rm -rf "$ANDROID_SDK_ROOT/cmdline-tools/tmp" /tmp/cmdline-tools.zip
+        fi
+        
+        echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_PATH
+
+    - name: ✅ Accept SDK licenses and install platform/build-tools (aidl)
+      run: |
+        set -euo pipefail
+        SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+        
+        yes | "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" --licenses
+        
+        # NOTE: Ensure your buildozer.spec uses API 33/Build Tools 33.0.0 for reliability!
+        yes | "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" "platform-tools" "platforms;android-33" "build-tools;33.0.0"
+        
+    - name: 🔒 Finalize Environment Variables
+      run: |
+        echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+        echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+        export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64 # Ensure Java is set for the final build
+        
+        for d in "$ANDROID_SDK_ROOT"/build-tools/*; do
+          if [ -d "$d" ]; then
+            echo "$d" >> $GITHUB_PATH
+          fi
+        done
+
+    - name: 🔨 Execute Buildozer (Final Build)
+      # Direct execution uses the fully provisioned environment
+      run: |
+        buildozer -v android debug
 
     - name: ⬆️ Upload APK artifact
       uses: actions/upload-artifact@v4
       with:
         name: Classic_Pong_APK
-        # The built APK will be in the project's 'bin' directory
         path: ./bin/*.apk
