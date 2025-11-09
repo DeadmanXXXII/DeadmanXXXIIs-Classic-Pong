@@ -1,13 +1,9 @@
-name: Robust CI/CD Android APK Build (Final Reliable Version)
+name: Ultimate Stable Android APK Build (Buildozer Native)
 
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
-
-env:
-  # Define a consistent location for the Android SDK inside the runner's workspace
-  ANDROID_SDK_ROOT: ${{ github.workspace }}/.android-sdk
 
 jobs:
   build:
@@ -18,79 +14,31 @@ jobs:
     - name: 📦 Checkout repository
       uses: actions/checkout@v4
 
-    # 🐍 Fix: Use the official action to guarantee Python 3.8 and distutils
-    - name: 🐍 Setup Python 3.8
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.8'
-
-    - name: ⚙️ Install essential system dependencies and build tools
+    - name: ⚙️ Install Essential Dependencies
       run: |
-        # Install Java and standard utilities
         sudo apt-get update
-        sudo apt-get install -y openjdk-11-jdk-headless unzip wget ca-certificates
+        # Install Python 3.8 development headers and a modern Java version (17 is now required by p4a)
+        sudo apt-get install -y python3-pip python3.8-dev openjdk-17-jdk-headless unzip wget ca-certificates
         
-        # FIX: Install libtinfo5 for legacy NDK compatibility
+        # Set Java Home environment variable for buildozer
+        echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV 
+
+        # FIX: Install libtinfo5 for legacy NDK/SDK tool compatibility
         wget -q https://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb
         sudo apt install -y ./libtinfo5_6.3-2ubuntu0.1_amd64.deb || true
         rm -f libtinfo5_6.3-2ubuntu0.1_amd64.deb
         
-        # Install Python build tools directly (Buildozer, Cython, Kivy)
+        # Install Buildozer and Kivy
         pip install --upgrade pip
         pip install buildozer cython kivy
-
-    - name: 🔧 Bootstrap Android cmdline-tools and sdkmanager
+        
+    - name: 🔨 Execute Buildozer and Accept Licenses
+      # This single step runs buildozer. Buildozer will download and install the SDK 
+      # into its preferred path (~/.buildozer/android/), and the 'yes |' pipe 
+      # automatically accepts all licenses, preventing the "Aidl not found" error.
       run: |
-        set -euo pipefail
-        mkdir -p "$ANDROID_SDK_ROOT"
-        cd "$ANDROID_SDK_ROOT"
-        
-        CLI_TOOLS_Z="commandlinetools-linux-9477386_latest.zip"
-        CLI_URL="https://dl.google.com/android/repository/${CLI_TOOLS_Z}"
-        
-        if [ ! -d "$ANDROID_SDK_ROOT/cmdline-tools/latest" ]; then
-          wget -q "$CLI_URL" -O /tmp/cmdline-tools.zip
-          mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
-          unzip -q /tmp/cmdline-tools.zip -d "$ANDROID_SDK_ROOT/cmdline-tools/tmp"
-          mv "$ANDROID_SDK_ROOT/cmdline-tools/tmp/cmdline-tools" "$ANDROID_SDK_ROOT/cmdline-tools/latest"
-          rm -rf "$ANDROID_SDK_ROOT/cmdline-tools/tmp" /tmp/cmdline-tools.zip
-        fi
-        
-        echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_PATH
-
-    - name: ✅ Accept SDK licenses and install platform/build-tools (aidl)
-      run: |
-        set -euo pipefail
-        SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
-        
-        # FIX: Accept licenses, using '|| true' to suppress non-fatal "Broken pipe" error
-        yes | "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" --licenses || true
-        
-        # Install tools (platform-tools, API 33, Build Tools 33.0.0)
-        yes | "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" "platform-tools" "platforms;android-33" "build-tools;33.0.0" || true
-        
-    - name: 🔒 Finalize Environment Variables
-      run: |
-        # Set persistent environment variables for the job
-        echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
-        echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
-        export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
-        
-        # Add build-tools directories to the PATH
-        for d in "$ANDROID_SDK_ROOT"/build-tools/*; do
-          if [ -d "$d" ]; then
-            echo "$d" >> $GITHUB_PATH
-          fi
-        done
-
-    - name: 🔨 Execute Buildozer (Final Build)
-      # 🛑 ULTIMATE FIX: Export variables inside the run block to force Buildozer to use them
-      run: |
-        export ANDROID_SDK_ROOT=${{ env.ANDROID_SDK_ROOT }}
-        export ANDROID_HOME=${{ env.ANDROID_SDK_ROOT }}
-        
-        buildozer -v android debug
-
+        yes | buildozer -v android debug --profile default
+    
     - name: ⬆️ Upload APK artifact
       uses: actions/upload-artifact@v4
       with:
