@@ -1,4 +1,4 @@
-name: Ultimate Stable Android APK Build (Official Kivy Action)
+name: Ultimate Stable Android APK Build (Buildozer Action)
 
 on:
   push:
@@ -7,7 +7,6 @@ on:
 
 jobs:
   build:
-    # Use the stable Ubuntu 22.04 environment
     runs-on: ubuntu-22.04 
 
     steps:
@@ -19,17 +18,20 @@ jobs:
       with:
         python-version: '3.8'
 
-    # 🛑 THE FIX: Use the official Kivy build action
-    - name: 🔨 Build APK using Kivy Build Action (p4a engine)
-      uses: kivy/kivy-build-action@v1
+    # 🛑 THE DEFINITIVE FIX: Use the correct, proven build action
+    - name: 🔨 Build APK using ArtemSBulgakov/buildozer-action
+      uses: ArtemSBulgakov/buildozer-action@v1 # The correct, stable action name
+      id: buildozer
       with:
         # Pass the buildozer command directly
-        buildozer_args: android debug
-        # Use a stable Java version
-        java_version: 17
+        command: buildozer android debug
+        # Use your project's root as the work directory
+        workdir: . 
+        buildozer_version: stable
         
     - name: ⬆️ Upload APK artifact
       uses: actions/upload-artifact@v4
       with:
         name: Classic_Pong_APK
+        # The action outputs the name of the final APK
         path: ./bin/*.apk
