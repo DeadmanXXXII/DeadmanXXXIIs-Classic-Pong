@@ -7,6 +7,7 @@ on:
 
 jobs:
   build:
+    # Pin to a stable Ubuntu version for environment consistency
     runs-on: ubuntu-22.04 
 
     steps:
@@ -14,29 +15,45 @@ jobs:
       uses: actions/checkout@v4
       
     - name: 🐍 Setup Python 3.8
+      # Guarantees a stable Python environment (including necessary dev packages)
       uses: actions/setup-python@v5
       with:
         python-version: '3.8'
 
-    # 🛑 THE DEFINITIVE FIX: Use the correct, proven build action
-    - name: 🔨 Build APK using ArtemSBulgakov/buildozer-action
-      uses: ArtemSBulgakov/buildozer-action@v1 # The correct, stable action name
+    - name: ⚙️ Install essential system dependencies and build tools
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y openjdk-17-jdk-headless unzip wget ca-certificates
+        
+        # Set Java Home for the action's environment
+        echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
+        
+        # FIX: Install libtinfo5 for legacy NDK/SDK tool compatibility
+        wget -q https://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb
+        sudo apt install -y ./libtinfo5_6.3-2ubuntu0.1_amd64.deb || true
+        rm -f libtinfo5_6.3-2ubuntu0.1_amd64.deb
+        
+        # Install Python build tools
+        pip install --upgrade pip
+        pip install buildozer cython kivy
+
+    # 🔨 The Definitive Build Step
+    - name: 🔨 Execute Buildozer (Final Integrated Action)
+      # CRITICAL FIX 1: Use the specific stable version to avoid internal action bugs
+      uses: ArtemSBulgakov/buildozer-action@v1.2.0 
       id: buildozer
       with:
-        # Pass the buildozer command directly
         command: buildozer android debug
-        # Use your project's root as the work directory
         workdir: . 
         buildozer_version: stable
-    env:
-        # 🛑 FINAL FIX: Force the action to use the correct Linux user/group IDs 
-        # based on the environment to prevent the chown failure.
-        USER_ID: ${{ github.event.sender.id }}
-        GROUP_ID: ${{ github.event.sender.id }}
+      env:
+        # CRITICAL FIX 2: Set numeric IDs to bypass the 'chown: invalid user: user' error
+        # These UIDs/GIDs are valid for the GitHub Actions runner/Docker bridge.
+        USER_ID: 1001 
+        GROUP_ID: 121
         
     - name: ⬆️ Upload APK artifact
       uses: actions/upload-artifact@v4
       with:
         name: Classic_Pong_APK
-        # The action outputs the name of the final APK
         path: ./bin/*.apk
