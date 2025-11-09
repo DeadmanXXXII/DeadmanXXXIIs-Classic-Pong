@@ -1,16 +1,3 @@
-# .github/workflows/build_apk.yml
-#
-# Key changes:
-# - Create and own an Android SDK at $HOME/Android/Sdk so sdkmanager, licenses and build-tools
-#   are installed into the same SDK that Buildozer will use.
-# - Bootstrap cmdline-tools (so sdkmanager exists) and accept licenses non-interactively.
-# - Install the specific build-tools/platforms you need (so aidl is present).
-# - Keep Buildozer action afterwards (it will reuse ANDROID_SDK_ROOT).
-#
-# IMPORTANT: Make sure android.api in buildozer.spec matches the "platforms;android-<N>"
-# and the build-tools version you install below (example uses 36 / 36.1.0 because your logs
-# requested build-tools 36.1). If your buildozer.spec uses a different android.api, change the
-# platform and build-tools lines accordingly.
 name: Android APK Build (Buildozer)
 
 on:
@@ -19,7 +6,8 @@ on:
   workflow_dispatch:
 
 env:
-  ANDROID_SDK_ROOT: ${{ github.workspace }}/.android-sdk          # put the SDK inside the runner workspace (persisted across steps)
+  # Define a consistent location for the Android SDK inside the runner's workspace
+  ANDROID_SDK_ROOT: ${{ github.workspace }}/.android-sdk
 
 jobs:
   build:
@@ -31,64 +19,58 @@ jobs:
 
     - name: ⚙️ Install system deps and libtinfo5 workaround
       run: |
+        # Install necessary build tools and Java
         sudo apt-get update
         sudo apt-get install -y unzip wget ca-certificates openjdk-11-jdk-headless
-        # Install libtinfo5 from Jammy (needed for Buildozer/p4a on newer runners)
+        
+        # FIX 1: Install libtinfo5 from Jammy (needed for Buildozer/p4a on newer runners)
         wget -q https://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb
         sudo apt install -y ./libtinfo5_6.3-2ubuntu0.1_amd64.deb || true
         rm -f libtinfo5_6.3-2ubuntu0.1_amd64.deb
-
+        
     - name: 🔧 Bootstrap Android cmdline-tools and sdkmanager
-      # We explicitly install the Android commandline tools into ANDROID_SDK_ROOT so
-      # sdkmanager exists and will operate on the same SDK root we later give Buildozer.
+      # Manually set up the SDK root so sdkmanager exists for the next step.
       run: |
         set -euo pipefail
-        echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
         mkdir -p "$ANDROID_SDK_ROOT"
         cd "$ANDROID_SDK_ROOT"
-        # download commandlinetools (use a current release; name may change over time)
+        
+        # Download and extract commandlinetools
         CLI_TOOLS_Z="commandlinetools-linux-9477386_latest.zip"
         CLI_URL="https://dl.google.com/android/repository/${CLI_TOOLS_Z}"
+        
         if [ ! -d "$ANDROID_SDK_ROOT/cmdline-tools/latest" ]; then
           wget -q "$CLI_URL" -O /tmp/cmdline-tools.zip
           mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
           unzip -q /tmp/cmdline-tools.zip -d "$ANDROID_SDK_ROOT/cmdline-tools/tmp"
-          # inside the zip, the folder is usually "cmdline-tools"; move it to 'latest'
           mv "$ANDROID_SDK_ROOT/cmdline-tools/tmp/cmdline-tools" "$ANDROID_SDK_ROOT/cmdline-tools/latest"
           rm -rf "$ANDROID_SDK_ROOT/cmdline-tools/tmp" /tmp/cmdline-tools.zip
         fi
-        export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
-        sdkmanager --version || true
+        
+        # Add sdkmanager to PATH for the next step
+        echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_PATH
 
     - name: ✅ Accept SDK licenses and install platform/build-tools (aidl)
+      # FIX 2: Pre-install the necessary components and accept the licenses.
       run: |
         set -euo pipefail
-        export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
         SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
-        # Double-check sdkmanager exists
-        if [ ! -x "$SDKMANAGER" ]; then
-          echo "ERROR: sdkmanager not found at $SDKMANAGER"
-          ls -la "$ANDROID_SDK_ROOT" || true
-          exit 1
-        fi
+        
         # Accept licenses non-interactively for this SDK root
         yes | "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" --licenses
-        # Install platform-tools, the platform and build-tools. Change versions to match buildozer.spec android.api.
+        
+        # Install platform-tools, the platform, and build-tools (36.1.0 was requested in your logs)
         yes | "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" "platform-tools" "platforms;android-36" "build-tools;36.1.0"
-        echo "Installed build-tools; checking for aidl:"
-        find "$ANDROID_SDK_ROOT/build-tools" -type f -name aidl -print || true
-        ls -la "$ANDROID_SDK_ROOT/build-tools" || true
-
+        
     - name: 🔒 Ensure ANDROID_HOME variables for Buildozer
-      # Buildozer and some tools also check ANDROID_HOME; export both
+      # Export the final paths and environment variables to be used by the subsequent action.
       run: |
-        echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
-        echo "export ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
-        echo "export ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
-        # Add sdkmanager/build-tools to PATH so build steps can find aidl and other tools
+        # Set environment variables for the current job
+        echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+        echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
+        
+        # Add necessary directories to the PATH for the action to find tools like aidl
         echo "$ANDROID_SDK_ROOT/platform-tools" >> $GITHUB_PATH
-        echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_PATH
-        # Add build-tools directories to PATH (aidl lives here)
         for d in "$ANDROID_SDK_ROOT"/build-tools/*; do
           if [ -d "$d" ]; then
             echo "$d" >> $GITHUB_PATH
@@ -96,16 +78,13 @@ jobs:
         done
 
     - name: 🔨 Build APK with Buildozer
+      # The action will now use the pre-configured ANDROID_SDK_ROOT and environment variables.
       uses: digreatbrian/buildozer-action@v2
       id: buildozer
       with:
         buildozer-cmd: buildozer -v android debug
         work-dir: .
         python-version: 3.8
-      env:
-        ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
-        ANDROID_HOME: ${{ env.ANDROID_SDK_ROOT }}
-        JAVA_HOME: /usr/lib/jvm/java-11-openjdk-amd64
 
     - name: ⬆️ Upload APK artifact
       uses: actions/upload-artifact@v4
