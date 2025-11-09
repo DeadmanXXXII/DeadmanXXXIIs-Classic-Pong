@@ -18,7 +18,7 @@ jobs:
     - name: 📦 Checkout repository
       uses: actions/checkout@v4
 
-    # 🛑 CRITICAL FIX: Use the dedicated action for Python setup
+    # 🐍 Fix: Use the official action to guarantee Python 3.8 and distutils
     - name: 🐍 Setup Python 3.8
       uses: actions/setup-python@v5
       with:
@@ -26,22 +26,20 @@ jobs:
 
     - name: ⚙️ Install essential system dependencies and build tools
       run: |
-        # Install necessary build tools and Java
+        # Install Java and standard utilities
         sudo apt-get update
-        # We no longer need to install python3.8 manually, just java and build deps
         sudo apt-get install -y openjdk-11-jdk-headless unzip wget ca-certificates
         
-        # Install libtinfo5 fix
+        # FIX: Install libtinfo5 for legacy NDK compatibility
         wget -q https://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb
         sudo apt install -y ./libtinfo5_6.3-2ubuntu0.1_amd64.deb || true
         rm -f libtinfo5_6.3-2ubuntu0.1_amd64.deb
         
-        # Install Python build tools directly
+        # Install Python build tools directly (Buildozer, Cython, Kivy)
         pip install --upgrade pip
         pip install buildozer cython kivy
 
     - name: 🔧 Bootstrap Android cmdline-tools and sdkmanager
-      # Manually set up the SDK root.
       run: |
         set -euo pipefail
         mkdir -p "$ANDROID_SDK_ROOT"
@@ -65,18 +63,20 @@ jobs:
         set -euo pipefail
         SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
         
-        # Accept licenses
+        # FIX: Accept licenses, using '|| true' to suppress non-fatal "Broken pipe" error
         yes | "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" --licenses || true
         
-        # Install tools (Ensure your buildozer.spec uses API 33/Build Tools 33.0.0)
+        # Install tools (platform-tools, API 33, Build Tools 33.0.0)
         yes | "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" "platform-tools" "platforms;android-33" "build-tools;33.0.0" || true
         
     - name: 🔒 Finalize Environment Variables
       run: |
+        # Set persistent environment variables for the job
         echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
         echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
-        export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64 # Ensure Java is set
+        export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
         
+        # Add build-tools directories to the PATH
         for d in "$ANDROID_SDK_ROOT"/build-tools/*; do
           if [ -d "$d" ]; then
             echo "$d" >> $GITHUB_PATH
@@ -84,8 +84,11 @@ jobs:
         done
 
     - name: 🔨 Execute Buildozer (Final Build)
-      # Direct execution uses the fully provisioned environment
+      # 🛑 ULTIMATE FIX: Export variables inside the run block to force Buildozer to use them
       run: |
+        export ANDROID_SDK_ROOT=${{ env.ANDROID_SDK_ROOT }}
+        export ANDROID_HOME=${{ env.ANDROID_SDK_ROOT }}
+        
         buildozer -v android debug
 
     - name: ⬆️ Upload APK artifact
