@@ -1,4 +1,4 @@
-name: Robust CI/CD Android APK Build (Final Attempt)
+name: Robust CI/CD Android APK Build (Final Reliable Version)
 
 on:
   push:
@@ -11,26 +11,34 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    # Pin to a stable Ubuntu version
+    runs-on: ubuntu-22.04 
 
     steps:
     - name: 📦 Checkout repository
       uses: actions/checkout@v4
 
-    - name: ⚙️ Install system deps, Java, Python & libtinfo5
+    # 🛑 CRITICAL FIX: Use the dedicated action for Python setup
+    - name: 🐍 Setup Python 3.8
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.8'
+
+    - name: ⚙️ Install essential system dependencies and build tools
       run: |
         # Install necessary build tools and Java
         sudo apt-get update
-        sudo apt-get install -y python3.8 python3.8-distutils python3-pip openjdk-11-jdk-headless unzip wget ca-certificates
-        sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.8 1
+        # We no longer need to install python3.8 manually, just java and build deps
+        sudo apt-get install -y openjdk-11-jdk-headless unzip wget ca-certificates
         
         # Install libtinfo5 fix
         wget -q https://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb
         sudo apt install -y ./libtinfo5_6.3-2ubuntu0.1_amd64.deb || true
         rm -f libtinfo5_6.3-2ubuntu0.1_amd64.deb
         
-        # INSTALL BUILD TOOLS DIRECTLY HERE, bypassing Docker
-        pip3 install buildozer cython kivy
+        # Install Python build tools directly
+        pip install --upgrade pip
+        pip install buildozer cython kivy
 
     - name: 🔧 Bootstrap Android cmdline-tools and sdkmanager
       # Manually set up the SDK root.
@@ -57,16 +65,17 @@ jobs:
         set -euo pipefail
         SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
         
+        # Accept licenses
         yes | "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" --licenses
         
-        # NOTE: Ensure your buildozer.spec uses API 33/Build Tools 33.0.0 for reliability!
+        # Install tools (Ensure your buildozer.spec uses API 33/Build Tools 33.0.0)
         yes | "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" "platform-tools" "platforms;android-33" "build-tools;33.0.0"
         
     - name: 🔒 Finalize Environment Variables
       run: |
         echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
         echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
-        export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64 # Ensure Java is set for the final build
+        export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64 # Ensure Java is set
         
         for d in "$ANDROID_SDK_ROOT"/build-tools/*; do
           if [ -d "$d" ]; then
