@@ -1,5 +1,5 @@
 [app]
-title = DeadmanXXXII's Classic Pong
+title = DeadmanXXXIIs Classic Pong
 package.name = deadmanpong
 package.domain = https://github.com/DeadmanXXXII/
 source.dir = .
