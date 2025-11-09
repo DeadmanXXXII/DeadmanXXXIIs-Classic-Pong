@@ -17,25 +17,28 @@ jobs:
     - name: 📦 Checkout repository
       uses: actions/checkout@v4
 
-    - name: ⚙️ Install system deps and libtinfo5 workaround
+    - name: ⚙️ Install system deps, Java, Python & libtinfo5
       run: |
-        # Install necessary build tools and Java
+        # Set up Python 3.8
         sudo apt-get update
-        sudo apt-get install -y unzip wget ca-certificates openjdk-11-jdk-headless
+        sudo apt-get install -y python3.8 python3.8-distutils python3-pip openjdk-11-jdk-headless unzip wget ca-certificates
+        sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.8 1
         
-        # FIX 1: Install libtinfo5 from Jammy (needed for Buildozer/p4a on newer runners)
+        # Install libtinfo5 fix
         wget -q https://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb
         sudo apt install -y ./libtinfo5_6.3-2ubuntu0.1_amd64.deb || true
         rm -f libtinfo5_6.3-2ubuntu0.1_amd64.deb
         
+        # Install Buildozer and Kivy/Cython dependencies for the build
+        pip3 install buildozer cython kivy
+        
     - name: 🔧 Bootstrap Android cmdline-tools and sdkmanager
-      # Manually set up the SDK root so sdkmanager exists for the next step.
+      # Manually set up the SDK root.
       run: |
         set -euo pipefail
         mkdir -p "$ANDROID_SDK_ROOT"
         cd "$ANDROID_SDK_ROOT"
         
-        # Download and extract commandlinetools
         CLI_TOOLS_Z="commandlinetools-linux-9477386_latest.zip"
         CLI_URL="https://dl.google.com/android/repository/${CLI_TOOLS_Z}"
         
@@ -47,44 +50,40 @@ jobs:
           rm -rf "$ANDROID_SDK_ROOT/cmdline-tools/tmp" /tmp/cmdline-tools.zip
         fi
         
-        # Add sdkmanager to PATH for the next step
+        # Add sdkmanager to PATH
         echo "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin" >> $GITHUB_PATH
 
     - name: ✅ Accept SDK licenses and install platform/build-tools (aidl)
-      # FIX 2: Pre-install the necessary components and accept the licenses.
       run: |
         set -euo pipefail
         SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
         
-        # Accept licenses non-interactively for this SDK root
+        # Accept licenses
         yes | "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" --licenses
         
-        # Install platform-tools, the platform, and build-tools (36.1.0 was requested in your logs)
+        # Install tools
         yes | "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" "platform-tools" "platforms;android-36" "build-tools;36.1.0"
         
-    - name: 🔒 Ensure ANDROID_HOME variables for Buildozer
-      # Export the final paths and environment variables to be used by the subsequent action.
+    - name: 🔒 Finalize Environment Variables
+      # Set ANDROID_HOME and PATH variables for the upcoming build command
       run: |
-        # Set environment variables for the current job
         echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
         echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT" >> $GITHUB_ENV
         
-        # Add necessary directories to the PATH for the action to find tools like aidl
-        echo "$ANDROID_SDK_ROOT/platform-tools" >> $GITHUB_PATH
+        # Add build-tools to PATH so buildozer can find aidl/aapt
         for d in "$ANDROID_SDK_ROOT"/build-tools/*; do
           if [ -d "$d" ]; then
             echo "$d" >> $GITHUB_PATH
           fi
         done
 
-    - name: 🔨 Build APK with Buildozer
-      # The action will now use the pre-configured ANDROID_SDK_ROOT and environment variables.
-      uses: digreatbrian/buildozer-action@v2
-      id: buildozer
-      with:
-        buildozer-cmd: buildozer -v android debug
-        work-dir: .
-        python-version: 3.8
+    - name: 🔨 Execute Buildozer (Final Build)
+      # Direct execution uses the fully provisioned environment
+      run: |
+        # Ensure JAVA_HOME is set for the build
+        export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+        # Now run buildozer. It will use the environment variables we set.
+        buildozer -v android debug
 
     - name: ⬆️ Upload APK artifact
       uses: actions/upload-artifact@v4
