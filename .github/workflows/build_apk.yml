@@ -16,7 +16,7 @@ jobs:
     - name: 🐋 Execute Buildozer in Kivy Docker Container
       # This single step replaces all complex setup, license acceptance, and build steps.
       # It uses the official Docker image with all dependencies pre-configured and licenses accepted.
-      uses: docker://kivy/buildozer:stable
+      uses: docker://kivy/buildozer:python3-android
       with:
         # The entrypoint is the buildozer command, run inside the container
         args: android debug
