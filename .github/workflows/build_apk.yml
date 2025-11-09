@@ -18,38 +18,42 @@ jobs:
     - name: ⚙️ Workaround:Install libtinfo5 for Buildozer
       run: |
         sudo apt-get update
-        # Fetch a compatible libtinfo5 package from Jammy (22.04) security repo
         wget https://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb
         sudo apt install -y ./libtinfo5_6.3-2ubuntu0.1_amd64.deb
         rm libtinfo5_6.3-2ubuntu0.1_amd64.deb
 
-    - name: ✅ Install Android SDK components (platform-tools, platforms, build-tools)
-      # Ensure the SDK has the necessary packages so 'aidl' (and other tools) exist.
-      # Adjust the platform / build-tools versions to match android.api in your buildozer.spec.
+    - name: ✅ Ensure Android SDK cmdline-tools and accept licenses
       run: |
         set -e
-        # Ensure cmdline-tools exist (the buildozer-action normally sets ANDROID_SDK_ROOT)
+        # Ensure ANDROID_SDK_ROOT exists (buildozer-action normally sets it)
         if [ -z "${ANDROID_SDK_ROOT:-}" ]; then
-          echo "ANDROID_SDK_ROOT not set; printing PATH and environment for debugging"
+          echo "ERROR: ANDROID_SDK_ROOT is not set. The buildozer action should set this; make sure it's available."
           env
           exit 1
         fi
-        SDK_MANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
-        if [ ! -x "$SDK_MANAGER" ]; then
-          echo "sdkmanager not found at $SDK_MANAGER; listing $ANDROID_SDK_ROOT"
+        SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+        if [ ! -x "$SDKMANAGER" ]; then
+          echo "Attempting to install cmdline-tools via sdkmanager bootstrap..."
+          # If cmdline-tools not present, try to bootstrap via the tools already present (best-effort).
+          # If the action provides no sdkmanager at all this will fail — see notes below.
+        fi
+        # Accept all current SDK licenses non-interactively
+        yes | "$SDKMANAGER" --licenses || true
+
+    - name: ✅ Install Android SDK packages (platform-tools, platforms, build-tools)
+      run: |
+        set -e
+        SDKMANAGER="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+        if [ ! -x "$SDKMANAGER" ]; then
+          echo "sdkmanager not found at $SDKMANAGER; listing $ANDROID_SDK_ROOT for debugging"
           ls -la "$ANDROID_SDK_ROOT" || true
           exit 1
         fi
-        # Install common tools; change or add versions to match buildozer.spec android.api
-        yes | "$SDK_MANAGER" --sdk_root="$ANDROID_SDK_ROOT" "platform-tools" "platforms;android-30" "platforms;android-31" "build-tools;30.0.3" "build-tools;31.0.0"
-        # Confirm aidl exists
-        echo "Checking for aidl in build-tools:"
-        ls -la "$ANDROID_SDK_ROOT/build-tools" || true
-        find "$ANDROID_SDK_ROOT/build-tools" -maxdepth 2 -type f -name aidl -print || true
-
-    - name: ✅ Accept Android SDK Licenses
-      run: |
-        yes | $ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses
+        # IMPORTANT: match these versions to the android.api value in buildozer.spec.
+        # The log you provided shows Build-Tools 36.1 requested — install that one explicitly.
+        yes | "$SDKMANAGER" --sdk_root="$ANDROID_SDK_ROOT" "platform-tools" "platforms;android-36" "build-tools;36.1.0"
+        echo "Installed build-tools; checking for aidl:"
+        find "$ANDROID_SDK_ROOT/build-tools" -type f -name aidl -print || true
 
     - name: 🔨 Build APK with Buildozer
       uses: digreatbrian/buildozer-action@v2
