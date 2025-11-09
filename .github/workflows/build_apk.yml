@@ -1,4 +1,4 @@
-name: Ultimate Stable Android APK Build (Buildozer Native)
+name: Ultimate Stable Android APK Build (Official Kivy Action)
 
 on:
   push:
@@ -7,38 +7,27 @@ on:
 
 jobs:
   build:
-    # Pin to a stable Ubuntu version
+    # Use the stable Ubuntu 22.04 environment
     runs-on: ubuntu-22.04 
 
     steps:
-    - name: 📦 Checkout repository
+    - name: 📦 Checkout Repository
       uses: actions/checkout@v4
+      
+    - name: 🐍 Setup Python 3.8
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.8'
 
-    - name: ⚙️ Install Essential Dependencies
-      run: |
-        sudo apt-get update
-        # Install Python 3.8 development headers and a modern Java version (17 is now required by p4a)
-        sudo apt-get install -y python3-pip python3.8-dev openjdk-17-jdk-headless unzip wget ca-certificates
+    # 🛑 THE FIX: Use the official Kivy build action
+    - name: 🔨 Build APK using Kivy Build Action (p4a engine)
+      uses: kivy/kivy-build-action@v1
+      with:
+        # Pass the buildozer command directly
+        buildozer_args: android debug
+        # Use a stable Java version
+        java_version: 17
         
-        # Set Java Home environment variable for buildozer
-        echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV 
-
-        # FIX: Install libtinfo5 for legacy NDK/SDK tool compatibility
-        wget -q https://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb
-        sudo apt install -y ./libtinfo5_6.3-2ubuntu0.1_amd64.deb || true
-        rm -f libtinfo5_6.3-2ubuntu0.1_amd64.deb
-        
-        # Install Buildozer and Kivy
-        pip install --upgrade pip
-        pip install buildozer cython kivy
-        
-    - name: 🔨 Execute Buildozer and Accept Licenses
-      # This single step runs buildozer. Buildozer will download and install the SDK 
-      # into its preferred path (~/.buildozer/android/), and the 'yes |' pipe 
-      # automatically accepts all licenses, preventing the "Aidl not found" error.
-      run: |
-        yes | buildozer -v android debug --profile default
-    
     - name: ⬆️ Upload APK artifact
       uses: actions/upload-artifact@v4
       with:
