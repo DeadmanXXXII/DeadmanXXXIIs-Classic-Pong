@@ -28,6 +28,11 @@ jobs:
         # Use your project's root as the work directory
         workdir: . 
         buildozer_version: stable
+    env:
+        # 🛑 FINAL FIX: Force the action to use the correct Linux user/group IDs 
+        # based on the environment to prevent the chown failure.
+        USER_ID: ${{ github.event.sender.id }}
+        GROUP_ID: ${{ github.event.sender.id }}
         
     - name: ⬆️ Upload APK artifact
       uses: actions/upload-artifact@v4
